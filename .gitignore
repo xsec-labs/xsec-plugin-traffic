@@ -1,2 +1,3 @@
 node_modules/
+/.xsec-build/
 .DS_Store

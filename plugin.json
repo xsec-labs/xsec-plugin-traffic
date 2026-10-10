@@ -8,10 +8,13 @@
     "permissions": { "workspace.session.read": {}, "workspace.session.write": {}, "workspace.composer.write": {}, "workspace.tool.open": {}, "pluginData.read": {}, "pluginData.write": {} },
     "frontendApi": { "version": 2, "module": "single-esm", "methods": {
       "xsec.traffic.list": { "capability": "workspace.session.read", "binding": "session" },
+      "xsec.traffic.list.open": { "capability": "workspace.session.read", "binding": "session" },
       "xsec.traffic.get": { "capability": "workspace.session.read", "binding": "session" },
       "xsec.traffic.payload.open": { "capability": "workspace.session.read", "binding": "session" },
       "xsec.traffic.replay-attempts": { "capability": "workspace.session.read", "binding": "session" },
+      "xsec.traffic.replay-attempts.open": { "capability": "workspace.session.read", "binding": "session" },
       "xsec.traffic.replay": { "capability": "workspace.session.write", "binding": "session" },
+      "xsec.traffic.replay.open": { "capability": "workspace.session.write", "binding": "session" },
       "xsec.traffic.reference.add": { "capability": "workspace.composer.write", "binding": "session" },
       "xsec.workspace.tool.open": { "capability": "workspace.tool.open", "binding": "context" },
       "xsec.traffic.settings.get": { "capability": "pluginData.read", "binding": "plugin" },

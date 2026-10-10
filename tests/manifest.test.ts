@@ -25,6 +25,9 @@ async function verifyManifestCapabilities(): Promise<void> {
   assert.deepEqual(Object.keys(extension.permissions).sort(), ["pluginData.read", "pluginData.write", "workspace.composer.write", "workspace.session.read", "workspace.session.write", "workspace.tool.open"]);
   assert.deepEqual(extension.frontendApi.methods["xsec.traffic.replay"], { capability: "workspace.session.write", binding: "session" });
   assert.deepEqual(extension.frontendApi.methods["xsec.traffic.payload.open"], { capability: "workspace.session.read", binding: "session" });
+  assert.deepEqual(extension.frontendApi.methods["xsec.traffic.list.open"], { capability: "workspace.session.read", binding: "session" });
+  assert.deepEqual(extension.frontendApi.methods["xsec.traffic.replay-attempts.open"], { capability: "workspace.session.read", binding: "session" });
+  assert.deepEqual(extension.frontendApi.methods["xsec.traffic.replay.open"], { capability: "workspace.session.write", binding: "session" });
   assert.deepEqual(extension.frontendApi.methods["xsec.traffic.reference.add"], { capability: "workspace.composer.write", binding: "session" });
   assert.deepEqual(extension.frontendApi.methods["xsec.workspace.tool.open"], { capability: "workspace.tool.open", binding: "context" });
   assert.equal(extension.contributes.agentTools, undefined);
@@ -71,7 +74,20 @@ async function verifyGeneratedFrontend(): Promise<void> {
     assert.match(source, new RegExp(`${method}\\([^)]*\\)\\{return controller\\.${method}\\(`, "u"));
   }
   assert.equal(/\bfetch\s*\(/u.test(source), false);
-  assert.equal(/https?:\/\/(?!www\.w3\.org)/u.test(source), false);
+  // The pinned renderers embed namespace identifiers and diagnostic URLs as strings.
+  const staticUrls = [...new Set(source.match(/https?:\/\/[^"'`\\\s<>]+/gu))].sort();
+  assert.deepEqual(staticUrls, [
+    "http://www.w3.org/1998/Math/MathML",
+    "http://www.w3.org/1999/xhtml",
+    "http://www.w3.org/1999/xlink",
+    "http://www.w3.org/2000/svg",
+    "http://www.w3.org/XML/1998/namespace",
+    "https://base-ui.com/production-error",
+    "https://reactjs.org/docs/error-decoder.html?invariant=",
+  ].sort());
+  for (const networkApi of [/\bnew\s+WebSocket\s*\(/u, /\bnew\s+XMLHttpRequest\s*\(/u, /\bnew\s+EventSource\s*\(/u]) {
+    assert.equal(networkApi.test(source), false);
+  }
   for (const event of [
     "traffic.frontend.activate",
     "traffic.frontend.mount",

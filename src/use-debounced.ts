@@ -1,4 +1,4 @@
-import { useEffect, useState } from "preact/hooks";
+import { useEffect, useState } from "react";
 
 /** Return the initial value immediately, then publish changes after the quiet interval. */
 export function useDebounced<T>(value: T, delay: number): T {

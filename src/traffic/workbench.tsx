@@ -1,7 +1,8 @@
+import type { CSSProperties } from 'react';
 import { flowSnapshot, requestRaw, responseRaw } from "../proxy";
 import type { PluginHost, TrafficDetail, WorkspaceToolContext } from "../types";
 import { Icon } from "../ui/icon";
-import { Button, EmptyState, IconButton, Notice, Spinner } from "../ui/primitives";
+import { Button, Input, EmptyState, IconButton, Notice, Spinner } from "../ui/primitives";
 import { FilterDialog } from "./filter-dialog";
 import { FlowTable } from "./flow-table";
 import { MessagePane } from "./message-pane";
@@ -25,9 +26,9 @@ function pageSummary(model: WorkbenchModel): string {
 /** Render the traffic toolbar component. */
 function TrafficToolbar({ model }: { model: WorkbenchModel }) {
   return <header className="traffic-toolbar">
-    <label className="traffic-search"><span className="sr-only">搜索当前会话流量</span><Icon name="search" /><input className="x-input" disabled={!model.defaults} value={model.filter.searchTerm} placeholder="搜索方法、主机、URL、状态码或 MIME" onInput={(event) => model.applyFilter({ ...model.filter, searchTerm: event.currentTarget.value })} /></label>
+    <label className="traffic-search"><span className="sr-only">搜索当前会话流量</span><Icon name="search" /><Input disabled={!model.defaults} value={model.filter.searchTerm} placeholder="搜索方法、主机、URL、状态码或 MIME" onInput={(event) => model.applyFilter({ ...model.filter, searchTerm: event.currentTarget.value })} /></label>
     <div className="traffic-filter-button"><Button icon="filter" disabled={!model.defaults} onClick={() => model.setFilterOpen(true)}>筛选</Button><FilterCount count={model.activeFilters} /></div>
-    <div className="traffic-scope"><span>仅当前会话</span><code>宿主已绑定</code><em>{pageSummary(model)}</em></div>
+    <div className="traffic-scope"><span>仅当前会话</span><em>{pageSummary(model)}</em></div>
     <div className="traffic-pages"><IconButton label="上一页流量" icon="arrow-left" disabled={!model.previous.length || model.loading} onClick={model.previousPage} /><strong>第 {model.page} 页</strong><IconButton label="下一页流量" icon="arrow-right" disabled={!model.nextCursor || model.loading} onClick={model.nextPage} /></div>
     <IconButton label="刷新当前会话流量" icon="refresh" disabled={model.loading} onClick={() => model.setRevision((value) => value + 1)} />
   </header>;
@@ -40,9 +41,7 @@ function TrafficError({ model }: { model: WorkbenchModel }) {
   const retry = model.listError
     ? <Button onClick={() => model.setRevision((value) => value + 1)}>重新读取</Button>
     : model.defaults ? null : <Button onClick={() => model.setSettingsRevision((value) => value + 1)}>重新读取</Button>;
-  const dismiss = model.listError
-    ? () => model.setListError(null)
-    : model.defaults ? () => model.setError(null) : undefined;
+  const dismiss = !model.listError && model.defaults ? () => model.setError(null) : undefined;
   return <Notice onClose={dismiss} action={retry}>{message}</Notice>;
 }
 
@@ -127,11 +126,11 @@ function FilterOverlay({ model }: { model: WorkbenchModel }) {
 /** Render the workbench component. */
 export function Workbench({ host, context }: { host: PluginHost; context: WorkspaceToolContext }) {
   const model = useWorkbench(host, context);
-  return <section ref={model.workbenchRef} className="traffic-workbench" aria-label="当前会话抓包流量" style={{ "--traffic-list-height": `${model.listHeight}px` }}>
+  return <section ref={model.workbenchRef} className="traffic-workbench" aria-label="当前会话抓包流量" style={{ "--traffic-list-height": `${model.listHeight}px` } as CSSProperties}>
     <TrafficToolbar model={model} />
     <TrafficAlerts model={model} />
     <TrafficTableArea model={model} />
-    <div className="traffic-resizer" role="separator" aria-label="调整流量列表与报文详情高度" aria-orientation="horizontal" aria-valuemin={160} aria-valuenow={Math.round(model.listHeight)} onPointerDown={model.resizeList} />
+    <div className="traffic-resizer" role="separator" tabIndex={0} aria-label="调整流量列表与报文详情高度" aria-orientation="horizontal" aria-valuemin={160} aria-valuemax={model.listMaximum} aria-valuenow={Math.round(model.listHeight)} onPointerDown={model.resizeList} onKeyDown={model.resizeListKey} />
     <DetailToolbar model={model} />
     <DetailArea model={model} />
     <FilterOverlay model={model} />

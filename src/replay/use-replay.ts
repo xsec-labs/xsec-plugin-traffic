@@ -1,5 +1,5 @@
-import { useCallback, useRef } from "preact/hooks";
-import type { TargetedPointerEvent } from "preact";
+import { useCallback, useEffect, useRef } from "react";
+import type { KeyboardEvent, PointerEvent } from "react";
 import { getReplayAttempts, openTrafficTool, replayTraffic } from "../api/traffic";
 import { requiresSensitiveHostConfirmation } from "../proxy";
 import type { PluginHost, ReplayAttempt, ReplayResult } from "../types";
@@ -37,14 +37,17 @@ function applyReplayFeedback(response: ReplayResult, state: ReplayState) {
 async function reconcileReplayResponse(options: {
   response: ReplayResult; state: ReplayState;
   refreshHistory: (selectLatest: boolean) => Promise<ReplayAttempt[]>;
+  isCurrent: () => boolean;
 }) {
-  const { response, state, refreshHistory } = options;
+  const { response, state, refreshHistory, isCurrent } = options;
   try {
-    const history = includeResponseAttempt(await refreshHistory(true), response, state);
+    const received = await refreshHistory(true);
+    if (!isCurrent()) return;
+    const history = includeResponseAttempt(received, response, state);
     applyLatestDraft(history, state);
   } catch (reason) {
     const refreshError = `刷新重放历史失败：${String(reason)}`;
-    state.setHistoryError(refreshError);
+    if (isCurrent()) state.setHistoryError(refreshError);
   }
 }
 
@@ -71,16 +74,28 @@ function applyLatestDraft(history: ReplayAttempt[], state: ReplayState) {
 }
 
 /** Create a pointer handler that resizes the replay request and response panes. */
-function replayResize(state: ReplayState) {
-  return (event: TargetedPointerEvent<HTMLDivElement>) => {
+function useReplayResize(state: ReplayState) {
+  const cleanup = useRef<(() => void) | undefined>();
+  useEffect(() => () => cleanup.current?.(), []);
+  return (event: PointerEvent<HTMLDivElement>) => {
+    cleanup.current?.();
     event.preventDefault();
-    const move = (next: PointerEvent) => {
-      const bounds = state.exchangeRef.current?.getBoundingClientRect(); if (!bounds) return;
+    const move = (next: globalThis.PointerEvent) => {
+      const bounds = state.exchangeRef.current?.getBoundingClientRect();
+      if (!bounds) throw Error("重放面板调整目标已经卸载");
       const value = state.stacked ? ((next.clientY - bounds.top) / bounds.height) * 100 : ((next.clientX - bounds.left) / bounds.width) * 100;
       state.setPanePercent(Math.min(MAX_PANE_PERCENT, Math.max(MIN_PANE_PERCENT, value)));
     };
-    const up = () => { document.removeEventListener("pointermove", move); document.removeEventListener("pointerup", up); };
-    document.addEventListener("pointermove", move); document.addEventListener("pointerup", up);
+    const up = () => {
+      document.removeEventListener("pointermove", move);
+      document.removeEventListener("pointerup", up);
+      document.removeEventListener("pointercancel", up);
+      cleanup.current = undefined;
+    };
+    cleanup.current = up;
+    document.addEventListener("pointermove", move);
+    document.addEventListener("pointerup", up);
+    document.addEventListener("pointercancel", up);
   };
 }
 
@@ -88,14 +103,18 @@ function replayResize(state: ReplayState) {
 function useReplayHistory(options: { host: PluginHost; flowId: string; state: ReplayState }) {
   const { host, flowId, state } = options;
   const tail = useRef<Promise<void>>(Promise.resolve());
-  const identity = useRef({ host, flowId }); identity.current = { host, flowId };
+  const identity = useRef<{ host: PluginHost; flowId: string }>(); identity.current = { host, flowId };
+  useEffect(() => {
+    identity.current = { host, flowId };
+    return () => { identity.current = undefined; };
+  }, [host, flowId]);
   return useCallback((selectLatest: boolean) => {
     const requested = { host, flowId };
     state.setHistoryError(undefined);
     const request = tail.current.then(async () => {
       const history = await getReplayAttempts(host, flowId);
       const current = identity.current;
-      if (current.host === requested.host && current.flowId === requested.flowId) {
+      if (current?.host === requested.host && current.flowId === requested.flowId) {
         state.setHistoryError(undefined);
         state.replaceAttempts(history, selectLatest);
       }
@@ -110,8 +129,9 @@ function useReplayHistory(options: { host: PluginHost; flowId: string; state: Re
 async function sendReplay(options: {
   host: PluginHost; state: ReplayState; confirmed: boolean;
   refreshHistory: (selectLatest: boolean) => Promise<ReplayAttempt[]>;
+  isCurrent: () => boolean;
 }) {
-  const { host, state, confirmed, refreshHistory } = options;
+  const { host, state, confirmed, refreshHistory, isCurrent } = options;
   if (!state.source || !state.rawRequest.trim()) return;
   state.setError(undefined); state.setNotice(undefined);
   const validationError = replayTargetError(state.targetHost, state.targetPort);
@@ -122,7 +142,7 @@ async function sendReplay(options: {
     state.confirmation.current = undefined;
     if (!approved || !sameConfirmation(state, approved)) {
       state.setConfirmOpen(false);
-      return sendReplay({ host, state, confirmed: false, refreshHistory });
+      return sendReplay({ host, state, confirmed: false, refreshHistory, isCurrent });
     }
   }
   if (!confirmed && requiresSensitiveHostConfirmation({
@@ -147,14 +167,15 @@ async function sendReplay(options: {
       sourceFlowId: state.source.flow_id, rawRequest: state.rawRequest, scheme: state.scheme,
       targetHost, targetPort: state.targetPort, confirmSensitiveHostChange: confirmed,
     });
+    if (!isCurrent()) return;
     if (response.attempt) {
       const responseHistory = includeResponseAttempt(state.attemptsRef.current, response, state);
       applyLatestDraft(responseHistory, state);
     }
     applyReplayFeedback(response, state);
-    await reconcileReplayResponse({ response, state, refreshHistory });
-  } catch (reason) { state.setError(String(reason)); }
-  finally { state.setSending(false); }
+    await reconcileReplayResponse({ response, state, refreshHistory, isCurrent });
+  } catch (reason) { if (isCurrent()) state.setError(String(reason)); }
+  finally { if (isCurrent()) state.setSending(false); }
 }
 
 /** Open the captured replay result in the request-detail workspace tool. */
@@ -172,6 +193,20 @@ async function openReplayResult(host: PluginHost, state: ReplayState) {
 /** Compose replay loading, editing, submission, history, and layout state. */
 export function useReplay(host: PluginHost, flowId: string, visible: boolean) {
   const state = useReplayState();
+  const sender = useRef({ active: true, epoch: 0, busy: false });
+  useEffect(() => {
+    sender.current.active = true; sender.current.busy = false;
+    return () => { sender.current.active = false; sender.current.epoch += 1; };
+  }, [host, flowId]);
+  const resize = useReplayResize(state);
+  const resizeKey = (event: KeyboardEvent<HTMLDivElement>) => {
+    const decrease = state.stacked ? "ArrowUp" : "ArrowLeft";
+    const increase = state.stacked ? "ArrowDown" : "ArrowRight";
+    if (![decrease, increase, "Home", "End"].includes(event.key)) return;
+    event.preventDefault();
+    state.setPanePercent(value => event.key === "Home" ? MIN_PANE_PERCENT : event.key === "End" ? MAX_PANE_PERCENT
+      : Math.min(MAX_PANE_PERCENT, Math.max(MIN_PANE_PERCENT, value + (event.key === decrease ? -1 : 1) * (event.shiftKey ? 10 : 5))));
+  };
   const selected = state.attempts.find((attempt) => attempt.id === state.selectedId) ?? null;
   const selectedIndex = state.attempts.findIndex((attempt) => attempt.id === state.selectedId);
   const refreshHistory = useReplayHistory({ host, flowId, state });
@@ -187,10 +222,17 @@ export function useReplay(host: PluginHost, flowId: string, visible: boolean) {
     state.setScheme(replayScheme(attempt.scheme));
     state.setTargetHost(attempt.target_host); state.setTargetPort(attempt.target_port);
   };
-  const send = (confirmed = false) => sendReplay({ host, state, confirmed, refreshHistory });
+  const send = async (confirmed = false) => {
+    const owner = sender.current;
+    if (!owner.active || owner.busy) return;
+    const epoch = owner.epoch; owner.busy = true;
+    const isCurrent = () => owner.active && owner.epoch === epoch;
+    try { await sendReplay({ host, state, confirmed, refreshHistory, isCurrent }); }
+    finally { if (isCurrent()) owner.busy = false; }
+  };
   const openResult = () => openReplayResult(host, state);
   const targetValid = replayTargetError(state.targetHost, state.targetPort) === undefined;
-  return { ...state, selected, selectedIndex, targetValid, selectAttempt, refreshHistory, send, resize: replayResize(state), openResult };
+  return { ...state, selected, selectedIndex, targetValid, selectAttempt, refreshHistory, send, resize, resizeKey, openResult };
 }
 
 export type ReplayModel = ReturnType<typeof useReplay>;

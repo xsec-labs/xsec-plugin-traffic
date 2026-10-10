@@ -1,7 +1,8 @@
-import { useEffect, useState } from "preact/hooks";
+import { useEffect, useState } from "react";
 import { importCa, loadCaStatus, rotateCa } from "../api/settings";
 import type { CaStatus, PluginHost } from "../types";
 import { Button, Dialog, Notice, Spinner } from "../ui/primitives";
+import { useSettingsMutationOwner } from "./mutation-owner";
 
 type CaModel = ReturnType<typeof useCaModel>;
 
@@ -12,6 +13,7 @@ function useCaModel(host: PluginHost) {
   const [error, setError] = useState<string>();
   const [confirmRotate, setConfirmRotate] = useState(false);
   const [revision, setRevision] = useState(0);
+  const owner = useSettingsMutationOwner(host);
   useEffect(() => {
     let active = true;
     setBusy(true);
@@ -22,11 +24,13 @@ function useCaModel(host: PluginHost) {
     return () => { active = false; };
   }, [host, revision]);
   const run = async (action: () => Promise<CaStatus>, name: string) => {
+    if (busy) return;
+    const epoch = owner.acquire(); if (epoch === undefined) return;
     setBusy(true);
     setError(undefined);
-    try { setStatus(await action()); }
-    catch (reason) { setError(`${name}失败：${String(reason)}`); }
-    finally { setBusy(false); }
+    try { const next = await action(); if (owner.current(epoch)) setStatus(next); }
+    catch (reason) { if (owner.current(epoch)) setError(`${name}失败：${String(reason)}`); }
+    finally { if (owner.release(epoch)) setBusy(false); }
   };
   return { status, busy, error, confirmRotate, setConfirmRotate, setRevision, run };
 }

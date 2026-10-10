@@ -1,4 +1,4 @@
-import { useCallback, useRef, useState } from "preact/hooks";
+import { useCallback, useRef, useState } from "react";
 import type { ReplayAttempt, TrafficDetail } from "../types";
 import { replayScheme } from "./target";
 

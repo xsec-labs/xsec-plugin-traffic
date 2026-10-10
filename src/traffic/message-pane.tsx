@@ -1,6 +1,7 @@
-import { useState } from "preact/hooks";
+import { ControlButton } from '@xsec/ui-react';
+import { useState } from "react";
 import { headerPairs, prettyBody } from "../proxy";
-import type { ComponentChildren } from "preact";
+import type { ReactNode } from "react";
 import type { FlowSection } from "../types";
 
 type Mode = "raw" | "headers" | "body" | "pretty";
@@ -16,7 +17,7 @@ export function MessagePane({ title, section, raw, meta }: {
   title: string;
   section?: FlowSection;
   raw: string;
-  meta?: ComponentChildren;
+  meta?: ReactNode;
 }) {
   const [mode, setMode] = useState<Mode>("raw");
   const headers = headerPairs(section?.headers);
@@ -24,7 +25,7 @@ export function MessagePane({ title, section, raw, meta }: {
   const bodyMode = mode === "body" || mode === "pretty";
   return <article className="traffic-message-pane">
     <header><div><strong>{title}</strong>{meta ? <span>{meta}</span> : null}</div><div className="message-modes">
-      {MODES.map((item) => <button type="button" className={mode === item.value ? "is-active" : ""} onClick={() => setMode(item.value)}>{item.label}</button>)}
+      {MODES.map((item) => <ControlButton key={item.value} variant="ghost" size="sm" aria-pressed={mode === item.value} className={mode === item.value ? "is-active" : ""} onClick={() => setMode(item.value)}>{item.label}</ControlButton>)}
     </div></header>
     {mode === "headers" ? <div className="message-headers">
       {section?.line ? <div className="message-header-row"><strong>起始行</strong><span>{section.line}</span></div> : null}

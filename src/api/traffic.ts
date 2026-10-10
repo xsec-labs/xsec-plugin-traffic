@@ -1,6 +1,6 @@
 import type { PluginHost, ReplayResult, TrafficDetail, TrafficFilter, TrafficPage } from "../types";
 import { loggedAction } from "../logging";
-import { openTrafficPayload } from "./traffic-payload";
+import { openTrafficData, openTrafficPayload } from "./traffic-payload";
 import { replayAttempts, replayResult, trafficDetail, trafficPage } from "./traffic-parse";
 
 const PAGE_SIZE = 100;
@@ -12,7 +12,7 @@ export async function listTraffic(
   filter: TrafficFilter,
 ): Promise<TrafficPage> {
   const params = { limit: PAGE_SIZE, filter, ...(cursor ? { cursor } : {}) };
-  return trafficPage(await host.request("xsec.traffic.list", params));
+  return trafficPage(await openTrafficData(host, "list", "xsec.traffic.list.open", params));
 }
 
 /** Load traffic through the host boundary. */
@@ -24,7 +24,7 @@ export async function getTraffic(host: PluginHost, flowId: string): Promise<Traf
 
 /** Load replay attempts through the host boundary. */
 export async function getReplayAttempts(host: PluginHost, flowId: string) {
-  return replayAttempts(await host.request("xsec.traffic.replay-attempts", { flowId }));
+  return replayAttempts(await openTrafficData(host, "history", "xsec.traffic.replay-attempts.open", { flowId }));
 }
 
 /** Submit a validated editable replay request through the host boundary. */
@@ -40,7 +40,7 @@ export async function replayTraffic(host: PluginHost, input: {
     scheme: input.scheme,
     targetPort: input.targetPort,
     sensitiveHostChangeConfirmed: input.confirmSensitiveHostChange,
-  }, async () => replayResult(await host.request("xsec.traffic.replay", input)));
+  }, async () => replayResult(await openTrafficData(host, "replay", "xsec.traffic.replay.open", input)));
 }
 
 /** Open traffic tool through the host boundary. */

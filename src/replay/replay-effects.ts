@@ -1,4 +1,4 @@
-import { useEffect, useRef } from "preact/hooks";
+import { useEffect, useRef } from "react";
 import { getTraffic } from "../api/traffic";
 import { ensureHost, requestRaw } from "../proxy";
 import type { PluginHost, ReplayAttempt, TrafficDetail } from "../types";
@@ -79,22 +79,24 @@ export function useReplayEvents(options: {
   const { host, visible, refreshHistory, setHistoryError } = options;
   const previousVisible = useRef(visible);
   useEffect(() => {
+    let active = true;
     let timer: number | undefined;
     const reconcile = () => {
       if (timer !== undefined) window.clearTimeout(timer);
       timer = window.setTimeout(() => {
         timer = undefined;
-        void refreshHistory(false).catch((reason) => setHistoryError(`刷新重放历史失败：${String(reason)}`));
+        void refreshHistory(false).catch((reason) => { if (active) setHistoryError(`刷新重放历史失败：${String(reason)}`); });
       }, EVENT_COALESCE_MS);
     };
     const becameVisible = visible && !previousVisible.current;
     previousVisible.current = visible;
     if (!visible) return;
     if (becameVisible) {
-      void refreshHistory(false).catch((reason) => setHistoryError(`刷新重放历史失败：${String(reason)}`));
+      void refreshHistory(false).catch((reason) => { if (active) setHistoryError(`刷新重放历史失败：${String(reason)}`); });
     }
     const subscription = host.onData("xsec.traffic.persisted", reconcile);
     return () => {
+      active = false;
       subscription.dispose();
       if (timer !== undefined) window.clearTimeout(timer);
     };

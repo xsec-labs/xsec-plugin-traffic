@@ -1,4 +1,4 @@
-import { useState } from "preact/hooks";
+import { useState } from "react";
 import { defaultFilterSettings, MIME_CATEGORIES, STATUS_CLASSES, TRAFFIC_SOURCES } from "../filter";
 import type { FilterSettings } from "../types";
 import { Button, Dialog } from "../ui/primitives";

@@ -1,4 +1,5 @@
-import { useEffect, useState } from "preact/hooks";
+import type { CSSProperties } from 'react';
+import { useEffect, useState } from "react";
 import { getTraffic, openTrafficTool } from "../api/traffic";
 import { flowSnapshot, requestRaw, responseRaw } from "../proxy";
 import type { PluginHost, TrafficDetail } from "../types";
@@ -27,7 +28,7 @@ export function DetailPage({ host, flowId }: { host: PluginHost; flowId: string 
     catch (reason) { setActionError(`打开重放器失败：${String(reason)}`); }
   };
   const rows = actionError ? "auto auto minmax(0, 1fr)" : "auto minmax(0, 1fr)";
-  return <section className="traffic-workbench traffic-detail-page" style={{ "--traffic-list-height": "0px", "grid-template-rows": rows }}>
+  return <section className="traffic-workbench traffic-detail-page" style={{ "--traffic-list-height": "0px", gridTemplateRows: rows } as CSSProperties}>
     <div className="traffic-detail-toolbar"><div><strong>{detail.method} {detail.url}</strong><span>{detail.status ?? "无响应"}</span></div><Button icon="play" onClick={() => void openReplay()}>发送到重放器</Button></div>
     {actionError ? <div className="traffic-alert-slot"><Notice onClose={() => setActionError(undefined)}>{actionError}</Notice></div> : null}
     <div className="traffic-message-grid">{hasMessages ? <><MessagePane title="Request" section={snapshot.request} raw={rawRequest} /><MessagePane title="Response" section={snapshot.response} raw={rawResponse} /></> : <EmptyState>该流量没有可显示的报文内容</EmptyState>}</div>

@@ -1,4 +1,4 @@
-import { useCallback, useRef, useState } from "preact/hooks";
+import { useCallback, useRef, useState } from "react";
 import { defaultFilterSettings } from "../filter";
 import { LatestTaskQueue } from "../latest-task-queue";
 import type { FilterSettings, TrafficDetail, TrafficSummary } from "../types";

@@ -31,19 +31,20 @@
 
 ## 插件实现
 
-插件前端使用 Preact + TypeScript，由 esbuild 生成清单声明的单文件 ESM。插件通过
+插件前端使用 React 18 + TypeScript 和公共 UI，由 esbuild 生成清单声明的单文件 ESM。插件通过
 Host RPC 读取当前会话数据，监听 `xsec.traffic.persisted` 后刷新当前页或提示有新流量。
 
 恢复后的 Host RPC 包括：
 
-- `xsec.traffic.list`、`xsec.traffic.get`
-- `xsec.traffic.replay-attempts`、`xsec.traffic.replay`
+- `xsec.traffic.list.open`、`xsec.traffic.get`、`xsec.traffic.payload.open`
+- `xsec.traffic.replay-attempts.open`、`xsec.traffic.replay.open`
 - `xsec.traffic.reference.add`、`xsec.workspace.tool.open`
 - `xsec.traffic.settings.get`、`xsec.traffic.settings.set`
 - `xsec.traffic.ca.status`、`xsec.traffic.ca.import`、`xsec.traffic.ca.rotate`
 - `xsec.traffic.passive-rules.list` 及规则增删改状态方法
 
-重放原始请求沿用 2 MiB 后端上限。宿主只为官方抓包插件的重放方法开放精确的大报文
+完整数据经既有 payload 通道分片返回，原 list / history / replay 方法保持契约。
+重放原始请求沿用 2 MiB 后端上限。宿主只为官方抓包插件的两项重放方法开放精确的大报文
 信封额度，并继续执行 capability、会话、协议、端口、字段和消息大小校验。
 
 ## 设置行为
@@ -75,5 +76,6 @@ Host RPC 读取当前会话数据，监听 `xsec.traffic.persisted` 后刷新当
 - Rust 测试覆盖解析、Host 校验、SQLite 游标/重放历史；显式启用的真实链路测试覆盖
   `Chrome → mitmdump → HTTP → SQLite / passive finding`。
 - 实际 Tauri iframe 冒烟使用 Plugin API 1.4 Desktop Host；`workspace.composer.write` 能力要求
-  前端声明最低为 `^1.5.0`，因为 `xsec.traffic.payload.open` 使用 payload-stream API。Stable 晋升还必须通过 Factory 调度的四平台 Desktop Beta 制品安装、激活与持久化
-  冒烟；该制品门禁不替代 iframe 页面交互证据。
+  前端声明最低为 `^1.5.0`，因为 `xsec.traffic.payload.open` 使用 payload-stream API。
+  日常更新按 Desktop 的插件三平台兼容规范选择受影响检查；正式分发需配套新增 Host 方法。
+  当前公共 UI、真实本机验收及未验证边界见 `docs/engineering/shared-ui.md`。

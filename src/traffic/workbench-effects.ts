@@ -1,4 +1,4 @@
-import { useEffect } from "preact/hooks";
+import { useEffect } from "react";
 import { getTraffic, listTraffic } from "../api/traffic";
 import { loadSettings } from "../api/settings";
 import type { PluginHost, TrafficFilter } from "../types";
@@ -39,7 +39,11 @@ export function useTrafficListEffect(options: {
         if (shouldClearNewTraffic(state.cursor)) state.setHasNewTraffic(false);
         state.setSelectedId((current) => current && result.items.some((item) => item.flow_id === current) ? current : result.items[0]?.flow_id ?? null);
       } catch (reason) {
-        if (state.listRequest.current === requestId) state.setListError(`读取抓包流量失败：${String(reason)}`);
+        if (state.listRequest.current === requestId) {
+          state.setRows([]); state.setNextCursor(null); state.setSelectedId(null);
+          state.setDetail(null); state.detailRequest.current += 1;
+          state.setListError(`读取抓包流量失败：${String(reason)}`);
+        }
       } finally {
         if (state.listRequest.current === requestId) state.setLoading(false);
       }

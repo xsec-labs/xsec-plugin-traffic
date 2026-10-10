@@ -1,5 +1,5 @@
-import { useCallback, useMemo } from "preact/hooks";
-import type { TargetedPointerEvent } from "preact";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import type { KeyboardEvent, PointerEvent } from "react";
 import { addTrafficReference, openTrafficTool } from "../api/traffic";
 import { activeFilterCount, filterInput, sameFilterSettings } from "../filter";
 import type { FilterSettings, PluginHost, TrafficSummary, WorkspaceToolContext } from "../types";
@@ -45,22 +45,56 @@ function useRequestFilter(filter: FilterSettings) {
 }
 
 /** Create a pointer handler that resizes the traffic-list pane. */
-function listResize(state: WorkbenchState) {
-  return (event: TargetedPointerEvent<HTMLDivElement>) => {
+function useListResize(state: WorkbenchState) {
+  const cleanup = useRef<(() => void) | undefined>();
+  const [listMaximum, setListMaximum] = useState(MIN_LIST_HEIGHT);
+  useEffect(() => () => cleanup.current?.(), []);
+  useEffect(() => {
+    const element = state.workbenchRef.current;
+    if (!element) throw Error("流量列表调整目标尚未挂载");
+    const measure = () => {
+      const maximum = Math.max(MIN_LIST_HEIGHT, Math.floor(element.getBoundingClientRect().height * .45));
+      setListMaximum(maximum); state.setListHeight(height => Math.min(maximum, height));
+    };
+    measure(); const observer = new ResizeObserver(measure); observer.observe(element);
+    return () => observer.disconnect();
+  }, [state.workbenchRef, state.setListHeight]);
+  const resizeList = (event: PointerEvent<HTMLDivElement>) => {
+    if (event.button !== 0) return;
+    cleanup.current?.();
     event.preventDefault(); const startY = event.clientY; const start = state.listHeight;
-    const move = (next: PointerEvent) => {
-      const available = state.workbenchRef.current?.getBoundingClientRect().height ?? 720;
+    const move = (next: globalThis.PointerEvent) => {
+      const element = state.workbenchRef.current;
+      if (!element) throw Error("流量列表调整目标已经卸载");
+      const available = element.getBoundingClientRect().height;
       const maximum = Math.max(MIN_LIST_HEIGHT, Math.floor(available * .45));
       state.setListHeight(Math.min(maximum, Math.max(MIN_LIST_HEIGHT, start + next.clientY - startY)));
     };
-    const up = () => { document.removeEventListener("pointermove", move); document.removeEventListener("pointerup", up); };
-    document.addEventListener("pointermove", move); document.addEventListener("pointerup", up);
+    const up = () => {
+      document.removeEventListener("pointermove", move);
+      document.removeEventListener("pointerup", up);
+      document.removeEventListener("pointercancel", up);
+      cleanup.current = undefined;
+    };
+    cleanup.current = up;
+    document.addEventListener("pointermove", move);
+    document.addEventListener("pointerup", up);
+    document.addEventListener("pointercancel", up);
   };
+  const resizeListKey = (event: KeyboardEvent<HTMLDivElement>) => {
+    const delta = event.shiftKey ? 40 : 10;
+    if (!["ArrowUp", "ArrowDown", "Home", "End"].includes(event.key)) return;
+    event.preventDefault();
+    state.setListHeight(height => event.key === "Home" ? MIN_LIST_HEIGHT : event.key === "End" ? listMaximum
+      : Math.min(listMaximum, Math.max(MIN_LIST_HEIGHT, height + (event.key === "ArrowUp" ? -delta : delta))));
+  };
+  return { resizeList, resizeListKey, listMaximum };
 }
 
 /** Compose traffic loading, filters, pagination, tools, and reference actions. */
 export function useWorkbench(host: PluginHost, context: WorkspaceToolContext) {
   const state = useWorkbenchState();
+  const listResize = useListResize(state);
   const requestFilter = useRequestFilter(state.filter);
   const applyFilter = useCallback((value: FilterSettings) => {
     if (sameFilterSettings(value, state.filter)) return;
@@ -87,7 +121,7 @@ export function useWorkbench(host: PluginHost, context: WorkspaceToolContext) {
     catch (reason) { state.setError(`引用流量失败：${String(reason)}`); }
   };
   return {
-    ...state, ...pages, applyFilter, resizeList: listResize(state), openDetail, openReplay, addReference,
+    ...state, ...pages, ...listResize, applyFilter, openDetail, openReplay, addReference,
     selectedDetail: state.detail?.flow_id === state.selectedId ? state.detail : null,
     activeFilters: activeFilterCount(state.filter),
     canAddReference: context.workspace.canAddComposerReference === true,

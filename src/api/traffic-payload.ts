@@ -126,41 +126,65 @@ function payloadStream(host: PluginHost, flowId: string): { completion: Promise<
     if (settled) return;
     settled = true;
     if (timeout !== undefined) window.clearTimeout(timeout);
-    subscription?.dispose();
+    try { subscription?.dispose(); }
+    catch (error) {
+      reject("error" in result ? new AggregateError([result.error, error], "流量数据读取与释放失败") : error);
+      return;
+    }
     if ("error" in result) reject(result.error);
     else resolve(result.payload);
   };
   timeout = window.setTimeout(() => {
     try { finish({ payload: collector.complete() }); } catch (error) { finish({ error }); }
   }, PAYLOAD_READ_TIMEOUT_MS);
-  subscription = host.onData(TRAFFIC_PAYLOAD_STREAM, (packet) => {
-    try {
-      const payload = collector.accept(packet);
-      if (payload) finish(payload);
-    } catch (error) {
-      finish({ error });
-    }
-  });
+  try {
+    subscription = host.onData(TRAFFIC_PAYLOAD_STREAM, (packet) => {
+      try {
+        const payload = collector.accept(packet);
+        if (payload) finish(payload);
+      } catch (error) {
+        finish({ error });
+      }
+    });
+  } catch (error) {
+    settled = true;
+    if (timeout !== undefined) window.clearTimeout(timeout);
+    throw error;
+  }
   return {
     completion,
     dispose: () => {
-      if (settled) return;
-      settled = true;
-      if (timeout !== undefined) window.clearTimeout(timeout);
-      subscription?.dispose();
+      finish({ error: new Error("流量数据读取已取消") });
     },
   };
 }
 
 /** Request a Host-bound body stream after installing the stream listener. */
 export async function openTrafficPayload(host: PluginHost, flowId: string): Promise<unknown> {
-  return loggedAction("traffic.payload.open", { flowId }, async () => {
-    const stream = payloadStream(host, flowId);
+  return openTrafficData(host, "payload", "xsec.traffic.payload.open", { flowId });
+}
+
+/** Correlate one bounded Host stream with its RPC acknowledgement. */
+export async function openTrafficData(
+  host: PluginHost,
+  kind: "list" | "history" | "payload" | "replay",
+  method: string,
+  params: Record<string, unknown>,
+): Promise<unknown> {
+  const requestId = crypto.randomUUID();
+  const streamId = `${kind}:${requestId}`;
+  const read = async () => {
+    const stream = payloadStream(host, streamId);
     try {
-      await host.request("xsec.traffic.payload.open", { flowId }).then((value) => payloadOpenResult(value, flowId));
-      return await stream.completion;
+      const [, payload] = await Promise.all([
+        host.request(method, { ...params, requestId }).then((value) => payloadOpenResult(value, streamId)),
+        stream.completion,
+      ]);
+      return payload;
     } finally {
       stream.dispose();
     }
-  });
+  };
+  return kind === "list" || kind === "history" ? read()
+    : loggedAction(`traffic.${kind === "payload" ? "payload" : "data.replay"}.open`, { requestId }, read);
 }
