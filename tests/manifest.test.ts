@@ -13,7 +13,7 @@ const sourcePreflightPath = ".github/workflows/ci.yml";
 async function verifyManifestCapabilities(): Promise<void> {
   const manifest = JSON.parse(await readFile(manifestPath, "utf8"));
   const extension = manifest.extensions["com.xsec.desktop"];
-  assert.equal(manifest.version, "2.2.0");
+  assert.equal(manifest.version, "2.2.1");
   assert.equal(extension.schemaVersion, 3);
   const sourcePackage = JSON.parse(await readFile(packagePath, "utf8"));
   const catalogManifest = JSON.parse(await readFile(catalogManifestPath, "utf8"));
